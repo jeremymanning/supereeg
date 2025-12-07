@@ -1,7 +1,6 @@
 from __future__ import division
 from __future__ import print_function
 import copy
-import deepdish as dd
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numbers
@@ -13,6 +12,7 @@ import time
 import warnings
 from .helpers import _kurt_vals, _normalize_Y, _vox_size, _resample, _plot_locs_connectome, \
     _plot_locs_hyp, _std, _gray, _nifti_to_brain, _brain_to_nifti, _brain_to_nifti2, _z_score, _std
+from .io import save_dict_to_hdf5
 
 class Brain(object):
     """
@@ -755,4 +755,4 @@ class Brain(object):
         if fname[-3:] != '.bo':
             fname += '.bo'
 
-        dd.io.save(fname, bo, compression=compression)
+        save_dict_to_hdf5(fname, bo, compression=compression)

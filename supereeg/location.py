@@ -4,9 +4,9 @@ import time
 import six
 import numpy as np
 import pandas as pd
-import deepdish as dd
 
 from .brain import Brain
+from .io import save_dict_to_hdf5
 from .helpers import _unique, _union, _count_overlapping, tal2mni, _plot_locs_connectome, \
     _plot_locs_hyp
 
@@ -197,4 +197,4 @@ class Location(object):
         if fname[-5:] != '.locs':
             fname += '.locs'
 
-        dd.io.save(fname, lo, compression=compression)
+        save_dict_to_hdf5(fname, lo, compression=compression)

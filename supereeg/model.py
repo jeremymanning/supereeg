@@ -7,7 +7,6 @@ import six
 import pandas as pd
 import numpy as np
 import seaborn as sns
-import deepdish as dd
 import matplotlib.pyplot as plt
 from .helpers import _get_corrmat, _r2z, _z2r, _log_rbf, _blur_corrmat, _plot_borderless,\
     _near_neighbor, _timeseries_recon, _count_overlapping, _plot_locs_connectome, \
@@ -15,6 +14,7 @@ from .helpers import _get_corrmat, _r2z, _z2r, _log_rbf, _blur_corrmat, _plot_bo
     _unique, _union, _empty, _to_log_complex, _to_exp_real
 from .brain import Brain
 from .nifti import Nifti
+from .io import save_dict_to_hdf5
 
 
 class Model(object):
@@ -522,7 +522,7 @@ class Model(object):
         if fname[-3:]!='.mo':
             fname+='.mo'
 
-        dd.io.save(fname, mo, compression=compression)
+        save_dict_to_hdf5(fname, mo, compression=compression)
 
     def get_slice(self, loc_inds, inplace=False):
         """

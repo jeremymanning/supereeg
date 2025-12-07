@@ -4,13 +4,13 @@ import warnings
 import requests
 import numpy as np
 import pandas as pd
-import deepdish as dd
 from datetime import datetime
 from .brain import Brain
 from .model import Model
 from .nifti import Nifti
 from .location import Location
 from .helpers import _resample_nii
+from .io import load_dict_from_hdf5, load_slice_from_hdf5
 
 BASE_URL = 'https://docs.google.com/uc?export=download'
 homedir = os.path.expanduser('~')
@@ -125,27 +125,25 @@ def _convert(data, return_type, vox_size):
             warnings.warn('Data is not a Nifti file, therefore vox_size was not computed '
                           ' Please specify nii as return_type if you would like a Nifti returned.')
             return data
-    elif return_type is 'nii':
+    elif return_type == 'nii':
         if type(data) is not Nifti:
             data = Nifti(data)
         if vox_size:
             return _resample_nii(data, target_res=vox_size)
         else:
             return data
-    elif return_type is 'bo':
+    elif return_type == 'bo':
         if type(data) is not Brain:
             data = Brain(data)
         return data
-    elif return_type is 'mo':
+    elif return_type == 'mo':
         if type(data) is not Model:
             data = Model(data)
         return data
 
+
 def _load_example(fname, fileid, sample_inds, loc_inds, field):
     """ Loads in dataset given a google file id """
-    # workaround for https://github.com/uchicago-cs/deepdish/issues/36
-    pd.io.pytables._tables()
-
     fullpath = os.path.join(homedir, 'supereeg_data', fname + '.' + fileid[1])
     if not os.path.exists(datadir):
         os.makedirs(datadir)
@@ -166,7 +164,7 @@ def _load_example(fname, fileid, sample_inds, loc_inds, field):
             except ValueError as e:
                 print(e)
                 raise ValueError('Download failed. Try deleting cache data in'
-                                 ' /Users/homedir/supereeg_data.') #FIXME: use generic home directory reference rather than platform-specific path
+                                 ' ~/supereeg_data.')
     return data
 
 
@@ -200,18 +198,18 @@ def _load_from_path(fpath, sample_inds=None, loc_inds=None, field=None):
         ext = fpath.split('.')[-1]
     except:
         raise ValueError("Must specify a file extension.")
-    if field != None:
+    if field is not None:
         if ext in ['bo', 'mo']:
             return _load_field(fpath, field)
         else:
             raise ValueError("Can only load field from Brain or Model object.")
-    elif ext=='bo':
-        if sample_inds!=None or loc_inds!=None:
+    elif ext == 'bo':
+        if sample_inds is not None or loc_inds is not None:
             return Brain(**_load_slice(fpath, sample_inds, loc_inds))
         else:
-            return Brain(**dd.io.load(fpath))
-    elif ext=='mo':
-        return Model(**dd.io.load(fpath))
+            return Brain(**load_dict_from_hdf5(fpath))
+    elif ext == 'mo':
+        return Model(**load_dict_from_hdf5(fpath))
     elif ext in ('nii', 'gz'):
         return Nifti(fpath)
     else:
@@ -226,32 +224,32 @@ def _load_from_cache(fname, ftype, sample_inds=None, loc_inds=None, field=None):
             return _load_field(fullpath, field)
         else:
             raise ValueError("Can only load field from Brain or Model object.")
-    elif ftype is 'bo':
+    elif ftype == 'bo':
         if sample_inds is not None or loc_inds is not None:
             return Brain(**_load_slice(fullpath, sample_inds, loc_inds))
         else:
-            return Brain(**dd.io.load(fullpath))
-    elif ftype is 'mo':
+            return Brain(**load_dict_from_hdf5(fullpath))
+    elif ftype == 'mo':
         # if the model was created using supereeg<0.2.0, load using the "old" format
         # (i.e. supereeg>=0.2.0 computes model in log space)
         date_created = _load_field(fullpath, field='date_created')
-        if datetime.strptime(date_created, "%c")< datetime(2018, 7, 27, 14, 40, 48, 359141):
+        if datetime.strptime(date_created, "%c") < datetime(2018, 7, 27, 14, 40, 48, 359141):
             num = _load_field(fullpath, field='numerator')
             den = _load_field(fullpath, field='denominator')
             locs = _load_field(fullpath, field='locs')
             n_subs = _load_field(fullpath, field='n_subs')
             return Model(data=np.divide(num, den), locs=locs, n_subs=n_subs)
         else:
-            return Model(**dd.io.load(fullpath))
-    elif ftype is 'nii':
+            return Model(**load_dict_from_hdf5(fullpath))
+    elif ftype == 'nii':
         return Nifti(fullpath)
-    elif ftype is 'locs':
+    elif ftype == 'locs':
         return Location(fullpath)
 
 
 def _load_field(fname, field):
     """ Loads a particular field of a file """
-    return dd.io.load(fname, group='/' + field) #FIXME: use os.path.join rather than using slashes
+    return load_dict_from_hdf5(fname, group='/' + field)
 
 
 def _load_slice(fname, sample_inds=None, loc_inds=None):
@@ -275,30 +273,55 @@ def _load_slice(fname, sample_inds=None, loc_inds=None):
         Dictionary of contents to pass to brain object
 
     """
+    sr = load_dict_from_hdf5(fname, group='/sample_rate')
+    meta = load_dict_from_hdf5(fname, group='/meta')
+    date_created = load_dict_from_hdf5(fname, group='/date_created')
 
-    sr = dd.io.load(fname, group='/sample_rate') #FIXME: use os.path.join rather than using slashes
-    meta = dd.io.load(fname, group='/meta') #FIXME: use os.path.join rather than using slashes
-    date_created = dd.io.load(fname, group='/date_created') #FIXME: use os.path.join rather than using slashes
+    # Load full data and locs first, then slice
+    # This is necessary because h5py slicing is more limited than deepdish
+    full_data = load_dict_from_hdf5(fname, group='/data')
+    full_locs = load_dict_from_hdf5(fname, group='/locs')
+    sessions_data = load_dict_from_hdf5(fname, group='/sessions')
 
-    if sample_inds!=None and loc_inds!=None:
+    # Convert to numpy arrays if needed
+    if isinstance(full_data, pd.DataFrame):
+        full_data = full_data.values
+    if isinstance(full_locs, pd.DataFrame):
+        full_locs = full_locs.values
+
+    # Handle sessions - could be Series, list, or array
+    if isinstance(sessions_data, pd.Series):
+        sessions_series = sessions_data
+    else:
+        sessions_series = pd.Series(sessions_data)
+
+    if sample_inds is not None and loc_inds is not None:
         if not isinstance(sample_inds, int) and not isinstance(loc_inds, int):
-            raise IndexError("Slicing with 2 lists is currently not supported.") #FIXME: make this message more specific
-        data = dd.io.load(fname, group='/data', sel=dd.aslice[sample_inds, loc_inds]) #FIXME: use os.path.join rather than using slashes
-        locs = dd.io.load(fname, group='/locs', sel=dd.aslice[loc_inds, :]) #FIXME: use os.path.join rather than using slashes
-        sessions = dd.io.load(fname, group='/sessions').iloc[sample_inds].tolist() #FIXME: use os.path.join rather than using slashes
-    elif loc_inds==None:
-        data = dd.io.load(fname, group='/data', sel=dd.aslice[sample_inds, :]) #FIXME: use os.path.join rather than using slashes
-        locs = dd.io.load(fname, group='/locs') #FIXME: use os.path.join rather than using slashes
-        sessions = dd.io.load(fname, group='/sessions').iloc[sample_inds].tolist() #FIXME: use os.path.join rather than using slashes
-    elif sample_inds==None:
-        data = dd.io.load(fname, group='/data', sel=dd.aslice[:, loc_inds]) #FIXME: use os.path.join rather than using slashes
-        locs = dd.io.load(fname, group='/locs', sel=dd.aslice[loc_inds, :]) #FIXME: use os.path.join rather than using slashes
-        sessions = dd.io.load(fname, group='/sessions').tolist() #FIXME: use os.path.join rather than using slashes
+            raise IndexError("Slicing with 2 lists is currently not supported.")
+        data = full_data[sample_inds, loc_inds] if isinstance(sample_inds, int) else full_data[sample_inds][:, loc_inds]
+        locs = full_locs[loc_inds, :] if not isinstance(loc_inds, int) else full_locs[loc_inds:loc_inds+1, :]
+        sessions = sessions_series.iloc[sample_inds].tolist() if hasattr(sessions_series.iloc[sample_inds], 'tolist') else [sessions_series.iloc[sample_inds]]
+    elif loc_inds is None:
+        data = full_data[sample_inds, :]
+        locs = full_locs
+        sessions = sessions_series.iloc[sample_inds].tolist() if hasattr(sessions_series.iloc[sample_inds], 'tolist') else [sessions_series.iloc[sample_inds]]
+    elif sample_inds is None:
+        data = full_data[:, loc_inds]
+        locs = full_locs[loc_inds, :] if not isinstance(loc_inds, int) else full_locs[loc_inds:loc_inds+1, :]
+        sessions = sessions_series.tolist()
+
+    # Ensure sr is a list
+    if not isinstance(sr, list):
+        if hasattr(sr, 'tolist'):
+            sr = sr.tolist()
+        else:
+            sr = [sr]
+
     sample_rate = [sr[int(s-1)] for s in np.unique(sessions)]
     data = np.atleast_2d(data)
     locs = np.atleast_2d(locs)
-    if locs.shape[0]==1:
-        if data.shape[1]>data.shape[0]:
+    if locs.shape[0] == 1:
+        if data.shape[1] > data.shape[0]:
             data = data.T
     return dict(data=data, locs=locs,
                 sample_rate=sample_rate, meta=meta, date_created=date_created)
