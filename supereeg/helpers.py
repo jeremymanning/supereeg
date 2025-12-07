@@ -359,7 +359,7 @@ def tal2mni(r):
     up = np.array([[0.9900, 0, 0, 0], [0, 0.9700, 0, 0], [0, 0, 0.9200, 0], [0, 0, 0, 1.0000]])
     down = np.array([[0.9900, 0, 0, 0], [0, 0.9700, 0, 0], [0, 0, 0.8400, 0], [0, 0, 0, 1.0000]])
 
-    inpoints = np.c_[r, np.ones(r.shape[0], dtype=np.float)].T
+    inpoints = np.c_[r, np.ones(r.shape[0], dtype=np.float64)].T
     tmp = inpoints[2, :] < 0
     inpoints[:, tmp] = linalg.solve(np.dot(rotmat, down), inpoints[:, tmp])
     inpoints[:, ~tmp] = linalg.solve(np.dot(rotmat, up), inpoints[:, ~tmp])
@@ -407,7 +407,7 @@ def _blur_corrmat_cupy(Z, Zp, weights, block_size=1024):
     maxes = cp.zeros(n_wt).astype(cp.float32)
 
     block = (block_size, 1, 1)
-    num_blocks = np.int(np.ceil(n_wt / block_size))
+    num_blocks = int(np.ceil(n_wt / block_size))
     grid = (n_wt, 1, 1)
 
     get_maxes(grid, block, (weights, maxes, matches, wtx_gpu, wty_gpu, ktx_gpu, kty_gpu, w_n_rows, w_n_cols, n_kt))
