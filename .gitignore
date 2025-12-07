@@ -120,3 +120,6 @@ test.py
 /*.ipynb
 /profiles
 stats.py
+
+# Claude Code
+CLAUDE.md
