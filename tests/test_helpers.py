@@ -166,7 +166,7 @@ def test_filter_elecs():
 
 
 def test_corr_column():
-    X = np.matrix([[1, 2, 3], [1, 2, 3]])
+    X = np.array([[1, 2, 3], [1, 2, 3]])
     corr_vals = _corr_column(np.array([[.1, .4], [.2, .5], [.3, .6]]), np.array([[.1, .4], [.2, .5], [.3, .6]]))
     print(corr_vals)
     assert isinstance(corr_vals, (float, np.ndarray))
