@@ -581,10 +581,10 @@ class Brain(object):
             if os.path.exists(template):
                 img = nib.load(template)
 
-            elif template is 'gray':
+            elif template == 'gray':
                 img = _gray(v_size)
 
-            elif template is 'std':
+            elif template == 'std':
                 img = _std(v_size)
 
             else:
@@ -684,10 +684,10 @@ class Brain(object):
             if os.path.exists(template):
                 img = nib.load(template)
 
-            elif template is 'gray':
+            elif template == 'gray':
                 img = _gray(v_size)
 
-            elif template is 'std':
+            elif template == 'std':
                 img = _std(v_size)
 
             else:

@@ -159,7 +159,7 @@ def simulate_model_data(n_samples=1000, n_elecs=170, locs=None, sample_locs=None
 
     if type(locs) is np.ndarray:
         locs = pd.DataFrame(locs, columns=['x', 'y', 'z'])
-    if locs is not None and cov is 'distance':
+    if locs is not None and cov == 'distance':
         R = 1 - scipy.spatial.distance.cdist(locs, locs, metric='euclidean')
         R -= np.min(R)
         R /= np.max(R)
@@ -278,11 +278,11 @@ def create_cov(cov, n_elecs=10):
         dimension (n_elecs x n_elecs)
 
     """
-    if cov is 'eye':
+    if cov == 'eye':
         R = np.eye(n_elecs)
-    elif cov is 'toeplitz':
+    elif cov == 'toeplitz':
         R = scipy.linalg.toeplitz(np.linspace(0, 1, n_elecs)[::-1])
-    elif cov is 'random':
+    elif cov == 'random':
         R = datasets.make_spd_matrix(n_elecs, random_state=1)
         R -= np.min(R)
         R /= np.max(R)

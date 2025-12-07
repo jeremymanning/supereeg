@@ -940,9 +940,9 @@ def _near_neighbor(bo, mo, match_threshold='auto'): #TODO: should this be part o
         nbo.locs.iloc[min_ind[0], :] = mo.locs.iloc[min_ind[1], :]
         d[min_ind[0]] = np.inf
         d[:, min_ind[1]] = np.inf
-    if not match_threshold is 0 or None:
+    if match_threshold != 0 and match_threshold is not None:
 
-        if match_threshold is 'auto':
+        if match_threshold == 'auto':
             v_size = _vox_size(mo.locs)
             thresh_bool = abs(nbo.locs - bo.locs) > v_size
             thresh_bool = thresh_bool.any(1).ravel()
