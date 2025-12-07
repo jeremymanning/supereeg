@@ -1393,8 +1393,8 @@ def _data_and_samplerate_by_file_index(bo, xform, **kwargs):
             data_next, session_next, sr_next = xform(bo.data.loc[bo.sessions == session, :],
                                                                            bo.sessions.loc[bo.sessions == session],
                                                                            bo.sample_rate[idx], **kwargs)
-            data_results = data_results.append(data_next, ignore_index=True)
-            session_results = session_results.append(session_next, ignore_index=True)
+            data_results = pd.concat([data_results, data_next], ignore_index=True)
+            session_results = pd.concat([session_results, session_next], ignore_index=True)
             sample_rate.append(sr_next)
 
     return data_results, session_results, sample_rate
