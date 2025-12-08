@@ -150,7 +150,7 @@ def _save_item(f, path, item, compression):
             f.create_dataset(path, data=item, compression=compression)
     elif isinstance(item, list):
         arr = np.array(item)
-        if arr.dtype == object:
+        if arr.dtype == object or arr.dtype.kind == 'U':
             # Handle list of strings or mixed types
             grp = f.create_group(path)
             grp.attrs['_type'] = 'list'
@@ -327,7 +327,12 @@ def _load_item(item):
         elif item_type == 'complex_array':
             real = item['real'][()]
             imag = item['imag'][()]
-            return real + 1j * imag
+            # Construct complex array by direct assignment to avoid NaN issues
+            # when multiplying inf values (1j * (-inf) produces nan-infj)
+            result = np.empty(real.shape, dtype=np.complex128)
+            result.real = real
+            result.imag = imag
+            return result
 
         elif item_type == 'list':
             data = item['data'][()]

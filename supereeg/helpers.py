@@ -945,10 +945,10 @@ def _near_neighbor(bo, mo, match_threshold='auto'): #TODO: should this be part o
         if match_threshold == 'auto':
             v_size = _vox_size(mo.locs)
             thresh_bool = abs(nbo.locs - bo.locs) > v_size
-            thresh_bool = thresh_bool.any(1).ravel()
+            thresh_bool = thresh_bool.any(axis=1).to_numpy().ravel()
         else:
             thresh_bool = abs(nbo.locs - bo.locs) > match_threshold
-            thresh_bool = thresh_bool.any(1).ravel()
+            thresh_bool = thresh_bool.any(axis=1).to_numpy().ravel()
             assert match_threshold > 0, 'Negative Euclidean distances are not allowed'
         nbo.data = nbo.data.loc[:, ~thresh_bool]
         nbo.locs = nbo.locs.loc[~thresh_bool, :]
@@ -1566,7 +1566,8 @@ def _nifti_to_brain(nifti, mask_file=None):
     S = img.get_sform()
 
     Y = np.float64(mask.transform(nifti)).copy()
-    vmask = np.nonzero(mask.mask_img_.dataobj.flatten())[0]
+    # Use Fortran order to match _fullfact's MATLAB-style column-major indexing
+    vmask = np.nonzero(np.asarray(mask.mask_img_.dataobj).flatten(order='F'))[0]
 
     vox_coords = _fullfact(img.shape[0:3])[vmask, ::-1] - 1
     if 'from .bo' in str(hdr['descrip']):
