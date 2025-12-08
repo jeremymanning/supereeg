@@ -161,8 +161,11 @@ class Brain(object):
 
             elif sessions is None:
                 self.sessions = pd.Series([1 for i in range(self.data.shape[0])])
+            elif isinstance(sessions, pd.Series):
+                self.sessions = sessions.reset_index(drop=True)
             else:
-                self.sessions = pd.Series(sessions.ravel())
+                # Handle numpy arrays and other array-like objects
+                self.sessions = pd.Series(np.asarray(sessions).ravel())
 
             if type(sample_rate) in [int, float]:
                 self.sample_rate = [sample_rate]*len(self.sessions.unique())
@@ -599,7 +602,7 @@ class Brain(object):
             self.sample_rate = sample_rate
 
 
-        hdr = img.get_header()
+        hdr = img.header
         temp_v_size = hdr.get_zooms()[0:3]
 
         if not np.array_equiv(temp_v_size, v_size):
@@ -702,7 +705,7 @@ class Brain(object):
             self.sample_rate = sample_rate
 
 
-        hdr = img.get_header()
+        hdr = img.header
         temp_v_size = hdr.get_zooms()[0:3]
 
         if not np.array_equiv(temp_v_size, v_size):

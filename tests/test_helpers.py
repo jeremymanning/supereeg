@@ -247,6 +247,6 @@ def test_bo_nii_bo():
 def test_nii_bo_nii():
     bo_nii = se.Brain(_gray(20))
     nii = _brain_to_nifti(bo_nii, _gray(20))
-    nii_0 = _gray(20).get_data().flatten()
+    nii_0 = _gray(20).get_fdata().flatten()
     nii_0[np.isnan(nii_0)] = 0
-    assert np.allclose(nii_0, nii.get_data().flatten())
+    assert np.allclose(nii_0, nii.get_fdata().flatten())

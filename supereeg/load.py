@@ -171,17 +171,30 @@ def _load_example(fname, fileid, sample_inds, loc_inds, field):
 def _load_stream(fileid):
     """ Retrieve data from google drive """
     def _get_confirm_token(response):
+        # Check cookies first (older method)
         for key, value in response.cookies.items():
             if key.startswith('download_warning'):
                 return value
         return None
-    url = BASE_URL + fileid
+
     session = requests.Session()
-    response = session.get(BASE_URL, params = { 'id' : fileid }, stream = True)
+    response = session.get(BASE_URL, params={'id': fileid}, stream=True)
+
+    # Check if we got the virus scan warning page
     token = _get_confirm_token(response)
     if token:
-        params = { 'id' : fileid, 'confirm' : token }
-        response = session.get(BASE_URL, params = params, stream = True)
+        params = {'id': fileid, 'confirm': token}
+        response = session.get(BASE_URL, params=params, stream=True)
+    else:
+        # Check if response is HTML (virus scan warning page)
+        content_type = response.headers.get('Content-Type', '')
+        if 'text/html' in content_type:
+            # For large files, Google returns a virus scan warning page
+            # We need to confirm the download with confirm=t
+            params = {'id': fileid, 'confirm': 't', 'export': 'download'}
+            # Use the usercontent URL for direct download
+            download_url = 'https://drive.usercontent.google.com/download'
+            response = session.get(download_url, params=params, stream=True)
     return response
 
 

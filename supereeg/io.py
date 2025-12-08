@@ -1,8 +1,13 @@
 """
 HDF5 I/O utilities for supereeg objects.
 Replaces deepdish with direct h5py usage for numpy 2.0+ compatibility.
+Backwards compatible with files created by deepdish.
 """
 from __future__ import print_function
+try:
+    import hdf5plugin  # Enables reading blosc-compressed files from deepdish
+except ImportError:
+    pass  # hdf5plugin is optional but needed for legacy deepdish files with blosc
 import h5py
 import numpy as np
 import pandas as pd
@@ -33,6 +38,7 @@ def save_dict_to_hdf5(fname, data, compression='gzip'):
 def load_dict_from_hdf5(fname, group=None):
     """
     Load dictionary from HDF5 file.
+    Compatible with both new h5py format and legacy deepdish format.
 
     Parameters
     ----------
@@ -51,6 +57,15 @@ def load_dict_from_hdf5(fname, group=None):
             group_path = group.lstrip('/')
             if group_path in f:
                 return _load_item(f[group_path])
+            # Check if it's a root-level attribute (deepdish stores some fields as attrs)
+            elif group_path in f.attrs:
+                val = f.attrs[group_path]
+                if isinstance(val, bytes):
+                    return val.decode('utf-8')
+                elif hasattr(val, 'item'):
+                    # Handle numpy scalar types
+                    return val.item()
+                return val
             else:
                 raise KeyError(f"Group '{group}' not found in file")
         return _recursively_load_dict(f, '/')
@@ -169,7 +184,7 @@ def _save_item(f, path, item, compression):
 
 
 def _load_item(item):
-    """Load a single HDF5 item."""
+    """Load a single HDF5 item. Handles both new format and deepdish legacy format."""
     if isinstance(item, h5py.Dataset):
         data = item[()]
         item_type = item.attrs.get('_type', None)
@@ -194,9 +209,102 @@ def _load_item(item):
     elif isinstance(item, h5py.Group):
         item_type = item.attrs.get('_type', None)
 
+        # Check for deepdish format using TITLE attribute
+        title = item.attrs.get('TITLE', None)
+        if title is not None:
+            if isinstance(title, bytes):
+                title = title.decode('utf-8')
+            elif hasattr(title, 'tolist'):
+                # Handle numpy array case
+                title = str(title)
+
+            # Handle deepdish dict format
+            if isinstance(title, str) and title.startswith('dict:'):
+                result = {}
+                # Load attributes that are values (deepdish stores small values as attrs)
+                for attr_name, attr_val in item.attrs.items():
+                    if attr_name not in ('CLASS', 'TITLE', 'VERSION'):
+                        if isinstance(attr_val, bytes):
+                            result[attr_name] = attr_val.decode('utf-8')
+                        else:
+                            result[attr_name] = attr_val
+                # Load any groups/datasets
+                for key in item.keys():
+                    result[key] = _load_item(item[key])
+                return result
+
+            # Handle deepdish list format
+            if isinstance(title, str) and title.startswith('list:'):
+                result = []
+                # Deepdish stores list items as attributes i0, i1, i2, ...
+                i = 0
+                while f'i{i}' in item.attrs:
+                    val = item.attrs[f'i{i}']
+                    if isinstance(val, bytes):
+                        result.append(val.decode('utf-8'))
+                    else:
+                        result.append(val)
+                    i += 1
+                return result
+
+        # Check for deepdish pandas_type attribute (for Series/DataFrame)
+        pandas_type = item.attrs.get('pandas_type', None)
+        if pandas_type is not None:
+            if isinstance(pandas_type, bytes):
+                pandas_type = pandas_type.decode('utf-8')
+
+            if pandas_type == 'series':
+                values = item['values'][()]
+                index = item['index'][()]
+                name = item.attrs.get('name', None)
+                if isinstance(name, bytes):
+                    name = name.decode('utf-8')
+                elif name == b'N.':  # deepdish uses N. for None
+                    name = None
+                return pd.Series(values, index=index, name=name)
+
+            elif pandas_type == 'frame':
+                # Handle deepdish DataFrame format
+                # Deepdish uses block storage format
+                if 'block0_values' in item:
+                    # Block storage format (pandas 0.15.2 style)
+                    values = item['block0_values'][()]
+                    # Get column names
+                    if 'axis0' in item:
+                        columns_raw = item['axis0'][()]
+                        columns = [c.decode('utf-8') if isinstance(c, bytes) else c
+                                   for c in columns_raw]
+                    elif 'block0_items' in item:
+                        columns_raw = item['block0_items'][()]
+                        columns = [c.decode('utf-8') if isinstance(c, bytes) else c
+                                   for c in columns_raw]
+                    else:
+                        columns = list(range(values.shape[1]))
+                    # Get index
+                    if 'axis1' in item:
+                        index = item['axis1'][()]
+                    else:
+                        index = list(range(values.shape[0]))
+                    return pd.DataFrame(values, columns=columns, index=index)
+                elif 'values' in item:
+                    # Older simple format
+                    values = item['values'][()]
+                    if 'columns' in item:
+                        columns = _load_item(item['columns'])
+                    else:
+                        columns = list(range(values.shape[1]))
+                    if 'index' in item:
+                        index = _load_item(item['index'])
+                    else:
+                        index = list(range(values.shape[0]))
+                    return pd.DataFrame(values, columns=columns, index=index)
+                else:
+                    # Fall back to trying all keys as a dict
+                    return _recursively_load_dict(item, '')
+
+        # Handle our new format types
         if item_type == 'dataframe':
             values = item['values'][()]
-            # Handle column names
             columns_raw = item['columns'][()]
             columns = []
             for c in columns_raw:
@@ -235,7 +343,22 @@ def _load_item(item):
             return _recursively_load_dict(item, '')
 
         else:
-            # Try to load as dict (deepdish format compatibility)
+            # Empty group - could be empty dict in deepdish format
+            if len(item.keys()) == 0:
+                # Check if it has non-metadata attrs (deepdish stores small values as attrs)
+                has_data_attrs = any(k not in ('CLASS', 'TITLE', 'VERSION')
+                                    for k in item.attrs.keys())
+                if has_data_attrs:
+                    result = {}
+                    for attr_name, attr_val in item.attrs.items():
+                        if attr_name not in ('CLASS', 'TITLE', 'VERSION'):
+                            if isinstance(attr_val, bytes):
+                                result[attr_name] = attr_val.decode('utf-8')
+                            else:
+                                result[attr_name] = attr_val
+                    return result
+                return {}
+            # Try to load as dict (for both formats)
             return _recursively_load_dict(item, '')
 
     return None

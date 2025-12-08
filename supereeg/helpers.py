@@ -89,7 +89,7 @@ def _gray(res=None):
 
     gray_img = load('gray')
     threshold = 100
-    gray_data = gray_img.get_data()
+    gray_data = gray_img.get_fdata()
     gray_data[np.isnan(gray_data) | (gray_data < threshold)] = 0
 
     if np.iterable(res) or np.isscalar(res):
@@ -123,8 +123,8 @@ def _resample_nii(x, target_res, precision=5):
 
     from .nifti import Nifti
 
-    if np.any(np.isnan(x.get_data())):
-        img = x.get_data()
+    if np.any(np.isnan(x.get_fdata())):
+        img = x.get_fdata()
         img[np.isnan(img)] = 0.0
         x = nib.nifti1.Nifti1Image(img, x.affine)
 
@@ -140,14 +140,14 @@ def _resample_nii(x, target_res, precision=5):
     target_affine[0:3, 3] -= np.squeeze(np.multiply(np.divide(target_res, 2.0), np.sign(target_affine[0:3, 3])))
     target_affine[0:3, 3] += np.squeeze(np.sign(target_affine[0:3, 3]))
 
-    if len(scale) < np.ndim(x.get_data()):
-        assert np.ndim(x.get_data()) == 4, 'Data must be 3D or 4D'
+    if len(scale) < np.ndim(x.get_fdata()):
+        assert np.ndim(x.get_fdata()) == 4, 'Data must be 3D or 4D'
         scale = np.append(scale, x.shape[3])
 
-    # z = skimage.transform.rescale(x.get_data(), scale, order=3, mode='constant', cval=0, anti_aliasing=True,
+    # z = skimage.transform.rescale(x.get_fdata(), scale, order=3, mode='constant', cval=0, anti_aliasing=True,
     #                                multichannel=False)
 
-    z = transform.downscale_local_mean(x.get_data(), tuple(np.array(np.reciprocal(scale), dtype='int')),
+    z = transform.downscale_local_mean(x.get_fdata(), tuple(np.array(np.reciprocal(scale), dtype='int')),
                                           cval=float(0))
 
     try:
@@ -1599,12 +1599,16 @@ def _brain_to_nifti(bo, nii_template, antialiasing=False): #FIXME: this is incre
     """
     from .nifti import Nifti
 
-    hdr = nii_template.get_header()
+    hdr = nii_template.header
     temp_v_size = hdr.get_zooms()[0:3]
 
     R = bo.locs # get_locs()
     Y = bo.data.values
     Y = np.array(Y, ndmin=2)
+    # Ensure Y has shape (n_timepoints, n_electrodes) where n_electrodes = R.shape[0]
+    # When brain is created from nifti, Y may be transposed (n_electrodes, 1) instead of (1, n_electrodes)
+    if Y.shape[1] != R.shape[0] and Y.shape[0] == R.shape[0]:
+        Y = Y.T
     if bo.affine is None:
         S = nii_template.affine
     else:
@@ -1696,7 +1700,7 @@ def _brain_to_nifti2(bo, nii_template): #FIXME: this is incredibly inefficient; 
     """
     from .nifti import Nifti2
 
-    hdr = nii_template.get_header()
+    hdr = nii_template.header
     temp_v_size = hdr.get_zooms()[0:3]
 
     R = bo.locs

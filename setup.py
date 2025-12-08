@@ -17,6 +17,7 @@ setup(
     license=LICENSE,
     install_requires=[
         'h5py>=3.0.0',
+        'hdf5plugin>=4.0.0',
         'scikit-learn>=0.18.1',
         'pandas>=1.3.0',
         'seaborn>=0.7.1',
