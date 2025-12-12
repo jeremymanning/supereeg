@@ -1566,12 +1566,14 @@ def _nifti_to_brain(nifti, mask_file=None):
     S = img.get_sform()
 
     Y = np.float64(mask.transform(nifti)).copy()
-    # Use Fortran order to match _fullfact's MATLAB-style column-major indexing
-    vmask = np.nonzero(np.asarray(mask.mask_img_.dataobj).flatten(order='F'))[0]
+    vmask = np.nonzero(mask.mask_img_.dataobj.flatten())[0]
 
     vox_coords = _fullfact(img.shape[0:3])[vmask, ::-1] - 1
-    if 'from .bo' in str(hdr['descrip']):
-        vox_coords = vox_coords[:,::-1]
+    # Note: The 'from .bo' reversal was needed before the [::-1] was added to _fullfact line
+    # in commit fc46142. With the [::-1] in place, the extra reversal breaks the round-trip.
+    # Removing the 'from .bo' special case to ensure coordinate consistency.
+    # if 'from .bo' in str(hdr['descrip']):
+    #     vox_coords = vox_coords[:,::-1]
 
     R = np.array(np.dot(vox_coords, S[0:3, 0:3])) + S[:3, 3]
 
@@ -1653,8 +1655,10 @@ def _brain_to_nifti(bo, nii_template, antialiasing=False): #FIXME: this is incre
             for i in range(R.shape[0]):
                 data[round_locs[i, 0], round_locs[i, 1], round_locs[i, 2], :] = np.divide(data[round_locs[i, 0], round_locs[i, 1], round_locs[i, 2], :], counts[round_locs[i, 0], round_locs[i, 1], round_locs[i, 2], :])
 
-    if bo.nifti_shape is not None:
-        data = data.reshape(-1, order='F').reshape(data.shape)
+    # Note: The previous code had `data = data.reshape(-1, order='F').reshape(data.shape)`
+    # when bo.nifti_shape was set. This was buggy because reshape(-1, 'F') followed by
+    # reshape(shape) with default C-order scrambles the data. Removing this fixes the
+    # nifti roundtrip tests.
 
     nii = Nifti(data, affine=S)
     nii.header['descrip'] = 'from .bo'
